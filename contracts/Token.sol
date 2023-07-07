@@ -14,5 +14,9 @@ contract Token {
         name = _name;
         symbol = _symbol;
         totalSupply = _totalSupply;
+        balanceOf[msg.sender] = _totalSupply;
     }
+
+    mapping(address => uint256) public balanceOf;
+
 }

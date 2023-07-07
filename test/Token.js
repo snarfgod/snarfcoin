@@ -7,7 +7,7 @@ const tokens = (n) => {
 }
 
 describe('Token', async () => {
-  let token
+  let token, accounts, deployer
   const name = 'Snarfcoin'
   const symbol = 'SNARF'
   const totalSupply = tokens(1000000)
@@ -16,6 +16,8 @@ describe('Token', async () => {
   
   const Token = await ethers.getContractFactory('Token')
   token = await Token.deploy('Snarfcoin', 'SNARF', tokens(1000000))
+  accounts = await ethers.getSigners()
+  deployer = accounts[0]
   })
   describe('Deployment', async () => {
     it('has the right name', async () => {
@@ -29,6 +31,9 @@ describe('Token', async () => {
     })
     it('has the correct total supply', async () => {
       expect(await token.totalSupply()).to.equal(totalSupply)
+    })
+    it('assigns the total supply to the deployer', async () => {
+      expect(await token.balanceOf(deployer.address)).to.equal(totalSupply)
     })
   })
   
