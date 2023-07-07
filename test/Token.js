@@ -36,6 +36,15 @@ describe('Token', async () => {
       expect(await token.balanceOf(deployer.address)).to.equal(totalSupply)
     })
   })
-  
-  
+  describe('Transactions', async () => {
+    it('transfers tokens between accounts', async () => {
+      await token.transfer(accounts[1].address, tokens(100))
+      expect(await token.balanceOf(accounts[1].address)).to.equal(tokens(100))
+    })
+    it('does not transfer tokens if the sender does not have enough', async () => {
+      await expect(token.connect(accounts[1]).transfer(deployer.address, tokens(100)))
+      .to.be.revertedWith('Not enough tokens')
+    })
+  })
 })
+

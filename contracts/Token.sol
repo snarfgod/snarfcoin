@@ -19,4 +19,10 @@ contract Token {
 
     mapping(address => uint256) public balanceOf;
 
+    function transfer(address _to, uint256 _amount) public {
+        require(balanceOf[msg.sender] >= _amount, "Not enough tokens");
+        balanceOf[msg.sender] -= _amount;
+        balanceOf[_to] += _amount;
+    }
+
 }
