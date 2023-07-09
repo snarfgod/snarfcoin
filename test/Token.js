@@ -1,9 +1,9 @@
-const {ethers} = require('hardhat')
-const {expect} = require('chai')
+const { ethers } = require('hardhat')
+const { expect } = require('chai')
+const { result } = require('lodash')
 
 const tokens = (n) => {
   return ethers.utils.parseEther(n.toString())
-
 }
 
 describe('Token', async () => {
@@ -13,12 +13,14 @@ describe('Token', async () => {
   const totalSupply = tokens(1000000)
 
   beforeEach(async () => {
-  
-  const Token = await ethers.getContractFactory('Token')
-  token = await Token.deploy('Snarfcoin', 'SNARF', tokens(1000000))
-  accounts = await ethers.getSigners()
-  deployer = accounts[0]
+    const Token = await ethers.getContractFactory('Token')
+    token = await Token.deploy('Snarfcoin', 'SNARF', tokens(1000000))
+    accounts = await ethers.getSigners()
+    deployer = accounts[0]
+    receiver = accounts[1]
+    spender = accounts[2]
   })
+
   describe('Deployment', async () => {
     it('has the right name', async () => {
       expect(await token.name()).to.equal(name)
@@ -36,14 +38,123 @@ describe('Token', async () => {
       expect(await token.balanceOf(deployer.address)).to.equal(totalSupply)
     })
   })
-  describe('Transactions', async () => {
-    it('transfers tokens between accounts', async () => {
-      await token.transfer(accounts[1].address, tokens(100))
-      expect(await token.balanceOf(accounts[1].address)).to.equal(tokens(100))
+  describe('Simple Transfer', async () => {
+    let transaction, result, event
+
+    beforeEach(async () => {
+      transaction = await token.connect(deployer).transfer(receiver.address, tokens(100))
+      result = await transaction.wait()
+      event = result.events[0]
     })
-    it('does not transfer tokens if the sender does not have enough', async () => {
-      await expect(token.connect(accounts[1]).transfer(deployer.address, tokens(100)))
-      .to.be.revertedWith('Not enough tokens')
+    describe('Success', async () => {
+      it('transfers correct amounts between accounts', async () => {
+        expect(await token.balanceOf(deployer.address)).to.equal(tokens(999900))
+        expect(await token.balanceOf(receiver.address)).to.equal(tokens(100))
+      })
+      it('emits a correct transfer event', async () => {
+        expect(event.event).to.equal('Transfer')
+        expect(event.args[0]).to.equal(deployer.address)
+        expect(event.args[1]).to.equal(receiver.address)
+        expect(event.args.amount).to.equal(tokens(100))
+      })
+    })
+    describe('Failure', async () => {
+      it('rejects insufficient balances', async () => {
+        const invalidTransaction = token.connect(receiver).transfer(deployer.address, tokens(1000))
+        expect(invalidTransaction).to.be.revertedWith('ERC20: transfer amount exceeds balance')
+      })
+      it('rejects invalid recipients', async () => {
+        const invalidTransaction = token.connect(deployer).transfer(ethers.constants.AddressZero, tokens(100))
+        expect(invalidTransaction).to.be.revertedWith('ERC20: transfer to the zero address')
+      })
+      it('rejects transfers from the zero address', async () => {
+        const invalidTransaction = token.connect(ethers.constants.AddressZero).transfer(receiver.address, tokens(100))
+        expect(invalidTransaction).to.be.revertedWith('ERC20: transfer from the zero address')
+      })
+      it('rejects invalid amounts', async () => {
+        const invalidTransaction = token.connect(deployer).transfer(receiver.address, 0)
+        expect(invalidTransaction).to.be.revertedWith('ERC20: transfer amount must be greater than zero')
+      })
+    })
+  })
+  describe('Approvals', async () => {
+    let transaction, result, event
+
+    beforeEach(async () => {
+      transaction = await token.connect(deployer).approve(spender.address, tokens(100))
+      result = await transaction.wait()
+    })
+    describe('Success', async () => {
+      it('allocates an allowance for delegated token spending on an exchange', async () => {
+        expect(await token.allowance(deployer.address, spender.address)).to.equal(tokens(100))
+      })
+      it('emits a correct approval event', async () => {
+        event = result.events[0]
+        expect(event.event).to.equal('Approval')
+        expect(event.args[0]).to.equal(deployer.address)
+        expect(event.args[1]).to.equal(spender.address)
+        expect(event.args.value).to.equal(tokens(100))
+      })
+      describe('Failure', async () => {
+        it('rejects invalid recipients', async () => {
+          const invalidTransaction = token.connect(deployer).approve(ethers.constants.AddressZero, tokens(100))
+          expect(invalidTransaction).to.be.revertedWith('ERC20: approve to the zero address')
+        })
+        it('rejects invalid amounts', async () => {
+          const invalidTransaction = token.connect(deployer).approve(spender.address, 0)
+          expect(invalidTransaction).to.be.revertedWith('ERC20: approve amount must be greater than zero')
+        })
+      })
+    })
+  })
+  describe('Delegated Transfer', async () => {
+    beforeEach(async () => {
+      await token.connect(deployer).approve(spender.address, tokens(100))
+    })
+    describe('Success', async () => {
+      let transaction, result, event
+
+      beforeEach(async () => {
+        transaction = await token.connect(spender).transferFrom(deployer.address, receiver.address, tokens(100))
+        result = await transaction.wait()
+        event = result.events[0]
+      })
+      it('transfers correct amounts between accounts', async () => {
+        expect(await token.balanceOf(deployer.address)).to.equal(tokens(999900))
+        expect(await token.balanceOf(receiver.address)).to.equal(tokens(100))
+      })
+      it('resets the allowance', async () => {
+        expect(await token.allowance(deployer.address, spender.address)).to.equal(0)
+      })
+      it('emits a correct transfer event', async () => {
+        expect(event.event).to.equal('Transfer')
+        expect(event.args[0]).to.equal(deployer.address)
+        expect(event.args[1]).to.equal(receiver.address)
+        expect(event.args.amount).to.equal(tokens(100))
+      })
+    })
+    describe('Failure', async () => {
+      it('rejects insufficient balances', async () => {
+        const invalidTransaction = token.connect(spender).transferFrom(deployer.address, receiver.address, tokens(1000))
+        expect(invalidTransaction).to.be.revertedWith('ERC20: transfer amount exceeds balance')
+      })
+      it('rejects invalid recipients', async () => {
+        const invalidTransaction = token.connect(spender).transferFrom(deployer.address, ethers.constants.AddressZero, tokens(100))
+        expect(invalidTransaction).to.be.revertedWith('ERC20: transfer to the zero address')
+      })
+      it('rejects transfers from the zero address', async () => {
+        const invalidTransaction = token.connect(spender).transferFrom(ethers.constants.AddressZero, receiver.address, tokens(100))
+        expect(invalidTransaction).to.be.revertedWith('ERC20: transfer from the zero address')
+      })
+      it('rejects invalid amounts', async () => {
+        const invalidTransaction = token.connect(spender).transferFrom(deployer.address, receiver.address, 0)
+        expect(invalidTransaction).to.be.revertedWith('ERC20: transfer amount must be greater than zero')
+      })
+      it('rejects insufficient allowances', async () => {
+        await token.connect(deployer).approve(spender.address, tokens(50))
+        const invalidTransaction = token.connect(spender).transferFrom(deployer.address, receiver.address, tokens(100))
+        expect(invalidTransaction).to.be.revertedWith('ERC20: transfer amount exceeds allowance')
+      })
     })
   })
 })
