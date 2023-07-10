@@ -27,38 +27,39 @@ contract Token {
     );
     event Approval(
         address indexed owner,
-        address indexed spender,
+        address indexed exchange,
         uint256 value
     );
 
-
-    function transfer(address _to, uint256 _amount) public returns (bool success){
-        require(balanceOf[msg.sender] >= _amount, "Not enough tokens");
-        require(_to != address(0), "Cannot transfer to zero address");
-        balanceOf[msg.sender] -= _amount;
-        balanceOf[_to] += _amount;
-        emit Transfer(msg.sender, _to, _amount);
-        return true;
-    }
-
-    function approve(address _spender, uint256 _value) public returns (bool success){
-        require(_spender != address(0), "Cannot approve zero address");
-        allowance[msg.sender][_spender] = _value;
-        emit Approval(msg.sender, _spender, _value);
-        return true;
-    }
-
-    function transferFrom(address _from, address _to, uint256 _value) public returns (bool success){
+    function _transfer(address _from, address _to, uint256 _amount) internal {
         require(_from != address(0), "Cannot transfer from zero address");
         require(_to != address(0), "Cannot transfer to zero address");
-        require(balanceOf[_from] >= _value, "Not enough tokens");
-        require(allowance[_from][msg.sender] >= _value, "Not enough allowance");
-        balanceOf[_from] -= _value;
-        balanceOf[_to] += _value;
-        allowance[_from][msg.sender] -= _value;
-        emit Transfer(_from, _to, _value);
+        require(balanceOf[_from] >= _amount, "Not enough tokens");
+        require(_to != address(0));
+        balanceOf[_from] -= _amount;
+        balanceOf[_to] += _amount;
+        emit Transfer(_from, _to, _amount);
+    }
+
+
+    function transfer(address _to, uint256 _amount) public returns (bool success){
+        _transfer(msg.sender, _to, _amount);
         return true;
     }
-        
 
+    function approve(address _exchange, uint256 _amount) public returns (bool success){
+        require(_exchange != address(0), "Cannot approve zero address");
+        allowance[msg.sender][_exchange] = _amount;
+        emit Approval(msg.sender, _exchange, _amount);
+        return true;
+    }
+
+    function transferFrom(address _from, address _to, uint256 _amount) public returns (bool success){
+        require(allowance[_from][msg.sender] >= _amount, "Not enough allowance");
+        _transfer(_from, _to, _amount);
+        allowance[_from][msg.sender] -= _amount;
+        return true;
+    }
+
+    
 }
